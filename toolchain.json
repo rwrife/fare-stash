@@ -1,0 +1,11 @@
+{
+  "platform": "windows+android+ios+flutter",
+  "flutter_version": "3.47.7",
+  "flutter_revision": "abaf9c5237",
+  "dart_version": "3.13.5",
+  "bundle_identifier": "com.infinityball.farestash",
+  "android_application_id": "com.infinityball.farestash",
+  "ios_bundle_identifier": "com.infinityball.farestash",
+  "ios_tablet_support": true,
+  "windows_primary_release": true
+}
