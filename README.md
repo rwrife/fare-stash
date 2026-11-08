@@ -33,7 +33,7 @@ UX strategy A (Platform-native adaptive):
 
 ## Status / milestones
 
-Documentation and specification scaffold only. The Flutter application directories (`windows/`, `android/`, `ios/`), source code, tests, and CI workflows do not exist yet. Milestone roadmap:
+Flutter 3.47.7 shell and Windows/Android/iOS runners exist. CI builds Windows release, Android debug APK and unsigned iOS simulator app; no pass data or persistence exists yet. Milestone roadmap:
 1. Issue #1: Flutter skeleton, multi-platform runner config, and GitHub Actions CI.
 2. Issue #2: Pure Dart domain models, pass/ride state transitions, and unit tests.
 3. Issue #3: SQLite persistence layer, migrations, and local storage tests.
