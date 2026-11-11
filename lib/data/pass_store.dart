@@ -111,6 +111,30 @@ final class PassStore {
     });
   }
 
+  /// Revalidates every historical ride before updating a pass. No event changes.
+  void update(TransitPass pass) {
+    _transaction(() {
+      final current = _load(pass.id);
+      if (current == null) throw StateError('Unknown pass: ${pass.id}');
+      PassLedger(pass, current.events);
+      _db.execute(
+        '''
+        UPDATE passes SET title = ?, kind = ?, starting_balance = ?, currency = ?,
+          valid_from = ?, valid_until = ? WHERE id = ?
+      ''',
+        [
+          pass.title,
+          pass.kind.name,
+          pass.startingBalance,
+          pass.currency,
+          pass.validFrom?.toUtc().toIso8601String(),
+          pass.validUntil?.toUtc().toIso8601String(),
+          pass.id,
+        ],
+      );
+    });
+  }
+
   /// Rechecks history inside write transaction; rejects duplicate or overdraw.
   void record(PassEvent event) {
     _transaction(() {
