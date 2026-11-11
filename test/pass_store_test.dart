@@ -74,6 +74,46 @@ void main() {
     reopened.close();
   });
 
+  test('editing revalidates history and preserves original on failure', () {
+    final store = PassStore.open(path);
+    store.save(pack(), [ride('a')]);
+    store.update(
+      TransitPass(
+        id: 'pack',
+        title: 'Renamed',
+        kind: PassKind.ridePack,
+        startingBalance: 2,
+      ),
+    );
+    expect(store.get('pack')!.pass.title, 'Renamed');
+    expect(
+      () => store.update(
+        TransitPass(
+          id: 'pack',
+          title: 'Overdraw',
+          kind: PassKind.ridePack,
+          startingBalance: 1,
+        ),
+      ),
+      returnsNormally,
+    );
+    expect(
+      () => store.update(
+        TransitPass(
+          id: 'pack',
+          title: 'Wrong type',
+          kind: PassKind.timeLimited,
+          validFrom: at.add(const Duration(days: 1)),
+          validUntil: at.add(const Duration(days: 2)),
+        ),
+      ),
+      throwsStateError,
+    );
+    expect(store.get('pack')!.pass.title, 'Overdraw');
+    expect(store.get('pack')!.events.map((e) => e.id), ['a']);
+    store.close();
+  });
+
   test('failed batch and rejected events leave history unchanged', () {
     final store = PassStore.open(path);
     store.save(pack(), [ride('a')]);
