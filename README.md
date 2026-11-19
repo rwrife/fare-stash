@@ -33,7 +33,7 @@ UX strategy A (Platform-native adaptive):
 
 ## Status / milestones
 
-Flutter 3.47.7 shell and Windows/Android/iOS runners exist. CI builds Windows release, Android debug APK and unsigned iOS simulator app; no pass data or persistence exists yet. Milestone roadmap:
+Flutter 3.47.7 Windows/Android/iOS runners, an offline SQLite pass ledger, and manual pass/ride workflows are implemented. The adaptive pass list and history use Cupertino controls on iOS/iPadOS, Material 3 on Android, and Fluent controls and a persistent desktop navigation pane on Windows. Milestone roadmap:
 1. Issue #1: Flutter skeleton, multi-platform runner config, and GitHub Actions CI.
 2. Issue #2: Pure Dart domain models, pass/ride state transitions, and unit tests.
 3. Issue #3: SQLite persistence layer, migrations, and local storage tests.
@@ -41,6 +41,14 @@ Flutter 3.47.7 shell and Windows/Android/iOS runners exist. CI builds Windows re
 5. Issue #5: Adaptive multi-platform UI (Cupertino, Material 3, Fluent) and golden/widget tests.
 6. Issue #6: Local JSON backup and CSV export with privacy audit.
 7. Issue #7: Release workflow, store description, and spark-media icon asset pipeline.
+
+### Adaptive workspace
+
+Phones switch between passes and history with platform-native navigation. Android tablets use a navigation rail; at 900 logical pixels and above, passes and history appear side by side. Windows retains its compact desktop navigation pane even in narrow windows and expands the pane at 1100 logical pixels. Each pass also opens its own history page with native back navigation, including the iOS edge-swipe gesture.
+
+Controls support keyboard traversal and mouse hover; Ctrl+N (Command+N) opens Add pass. Headings and action names are exposed to screen readers, errors are live regions, text follows system scaling, and platform light/dark and high-contrast themes are respected. Windows high contrast uses dark surfaces with a yellow accent.
+
+Run `flutter test test/adaptive_test.dart test/app_test.dart` for platform-isolated rendering, resizing, accessibility, and workflow checks. Screenshot assertions render iOS, Android, and Windows at 390×844, 768×1024, and 1440×900, verify opaque/nonempty output and native shell/layout geometry, and write PNGs to `build/adaptive-screenshots/` for inspection. These are rendering assertions rather than pixel-perfect baseline goldens; native-device VoiceOver/TalkBack/Narrator verification remains a manual release check.
 
 `AppStore/description.txt` provides accurate planning copy. The real `AppStore/icon.png` is generated via OpenAI Images using `~/.local/bin/spark-media --project fare-stash image --prompt "..."` and wired into Windows/Android/iOS icon sets; no placeholder icon is accepted as complete.
 

@@ -1,10 +1,13 @@
 import 'dart:math';
 
+import 'package:fare_stash/adaptive.dart';
 import 'package:fare_stash/data/pass_store.dart';
 import 'package:fare_stash/domain/pass_ledger.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 void main() => runApp(const FareStashApp());
 
@@ -19,23 +22,48 @@ class FareStashApp extends StatelessWidget {
     final platform = platformOverride ?? defaultTargetPlatform;
     final home = PassHome(store: store, platform: platform);
     if (platform == TargetPlatform.iOS) {
-      return CupertinoApp(
+      return CupertinoApp(title: 'Fare Stash', home: home);
+    }
+    if (platform == TargetPlatform.windows) {
+      return fluent.FluentApp(
         title: 'Fare Stash',
-        home: CupertinoPageScaffold(
-          navigationBar: const CupertinoNavigationBar(
-            middle: Text('Fare Stash'),
-          ),
-          child: SafeArea(child: home),
-        ),
+        themeMode: fluent.ThemeMode.system,
+        theme: fluent.FluentThemeData(brightness: Brightness.light),
+        darkTheme: fluent.FluentThemeData(brightness: Brightness.dark),
+        builder: (context, child) => MediaQuery.highContrastOf(context)
+            ? fluent.FluentTheme(
+                data: fluent.FluentThemeData(
+                  brightness: Brightness.dark,
+                  scaffoldBackgroundColor: Colors.black,
+                  cardColor: Colors.black,
+                  acrylicBackgroundColor: Colors.black,
+                  accentColor: fluent.Colors.yellow,
+                ),
+                child: child!,
+              )
+            : child!,
+        home: home,
       );
     }
     return MaterialApp(
       title: 'Fare Stash',
-      theme: ThemeData(useMaterial3: true),
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Fare Stash')),
-        body: SafeArea(child: home),
+      theme: ThemeData(useMaterial3: true, platform: platform),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        platform: platform,
+        brightness: Brightness.dark,
       ),
+      highContrastTheme: ThemeData(
+        useMaterial3: true,
+        platform: platform,
+        colorScheme: const ColorScheme.highContrastLight(),
+      ),
+      highContrastDarkTheme: ThemeData(
+        useMaterial3: true,
+        platform: platform,
+        colorScheme: const ColorScheme.highContrastDark(),
+      ),
+      home: home,
     );
   }
 }
@@ -55,11 +83,12 @@ class _PassHomeState extends State<PassHome> {
   bool _loading = true;
   String? _error;
   List<PassLedger> _passes = [];
+  int _selected = 0;
   static final _random = Random.secure();
 
   String _id() =>
       '${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 30)}';
-  bool get _ios => widget.platform == TargetPlatform.iOS;
+  AdaptiveControls get _controls => AdaptiveControls(widget.platform);
 
   @override
   void initState() {
@@ -107,9 +136,8 @@ class _PassHomeState extends State<PassHome> {
     }
   }
 
-  Widget _button(String label, VoidCallback onPressed) => _ios
-      ? CupertinoButton(onPressed: onPressed, child: Text(label))
-      : TextButton(onPressed: onPressed, child: Text(label));
+  Widget _button(String label, VoidCallback onPressed) =>
+      _controls.button(label, onPressed);
 
   Widget _field(
     String label,
@@ -117,62 +145,11 @@ class _PassHomeState extends State<PassHome> {
     bool numeric = false,
   }) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
-    child: _ios
-        ? CupertinoTextField(
-            controller: controller,
-            placeholder: label,
-            keyboardType: numeric ? TextInputType.number : TextInputType.text,
-            prefix: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Text('$label: '),
-            ),
-          )
-        : TextField(
-            controller: controller,
-            keyboardType: numeric ? TextInputType.number : TextInputType.text,
-            decoration: InputDecoration(
-              labelText: label,
-              border: const OutlineInputBorder(),
-            ),
-          ),
+    child: _controls.field(label, controller, numeric: numeric),
   );
 
-  Future<void> _dialog(String title, Widget body, VoidCallback save) async {
-    if (_ios) {
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: Text(title),
-          content: body,
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.pop(context),
-            ),
-            CupertinoDialogAction(onPressed: save, child: const Text('Save')),
-          ],
-        ),
-      );
-    } else {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: 420,
-            child: SingleChildScrollView(child: body),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(onPressed: save, child: const Text('Save')),
-          ],
-        ),
-      );
-    }
-  }
+  Future<void> _dialog(String title, Widget body, VoidCallback save) =>
+      _controls.dialog(context, title, body, save);
 
   void _passEditor([TransitPass? original]) {
     final title = TextEditingController(text: original?.title);
@@ -328,58 +305,189 @@ class _PassHomeState extends State<PassHome> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) return const Center(child: Text('Loading passes'));
-    if (_store == null) {
-      return Center(child: Text(_error ?? 'Storage unavailable'));
-    }
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const Text('Manual estimates only — not proof of a valid ticket.'),
-        _button('Add pass', () => _passEditor()),
-        if (_error != null) Text(_error!, key: const Key('store-error')),
-        if (_passes.isEmpty) const Text('No passes yet'),
-        for (final ledger in _passes) ...[
-          const Divider(),
-          Text(ledger.pass.title, style: const TextStyle(fontSize: 20)),
-          Text(
-            '${ledger.pass.kind.name} · ${ledger.balance == null ? 'time pass' : '${ledger.balance} ${ledger.pass.currency ?? 'rides'} left'} · ${ledger.rideCount} rides logged',
-          ),
-          Text(
-            ledger.pass.validAt(DateTime.now()) &&
-                    (ledger.balance == null || ledger.balance! > 0)
-                ? 'Estimated active'
-                : 'Expired or depleted (estimate)',
-          ),
-          Wrap(
-            children: [
-              _button(
-                'Edit ${ledger.pass.title}',
-                () => _passEditor(ledger.pass),
-              ),
-              _button(
-                'Log ride on ${ledger.pass.title}',
-                () => _rideEditor(ledger),
-              ),
-            ],
-          ),
-          for (final event in ledger.events.reversed)
-            Row(
+  Widget _heading(String text) => Semantics(
+    header: true,
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+      ),
+    ),
+  );
+
+  Widget _passList() => ListView(
+    key: const PageStorageKey('passes'),
+    padding: const EdgeInsets.all(16),
+    children: [
+      _heading('Your passes'),
+      const Text('Manual estimates only — not proof of a valid ticket.'),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: _button('Add pass', () => _passEditor()),
+      ),
+      if (_error != null)
+        Semantics(
+          liveRegion: true,
+          child: Text(_error!, key: const Key('store-error')),
+        ),
+      if (_passes.isEmpty) const Text('No passes yet'),
+      for (final ledger in _passes)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _controls.card(
+            context,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    '${event.kind.name} · ${event.occurredAt.toLocal()} · ${event.units ?? 'reverses ${event.reversesId}'}',
-                  ),
+                _heading(ledger.pass.title),
+                Text(
+                  '${ledger.pass.kind.name} · ${ledger.balance == null ? 'time pass' : '${ledger.balance} ${ledger.pass.currency ?? 'rides'} left'} · ${ledger.rideCount} rides logged',
                 ),
-                if (event.kind != PassEventKind.reversal &&
-                    !ledger.events.any((e) => e.reversesId == event.id))
-                  _button('Reverse ${event.id}', () => _correct(ledger, event)),
+                Text(
+                  ledger.pass.validAt(DateTime.now()) &&
+                          (ledger.balance == null || ledger.balance! > 0)
+                      ? 'Estimated active'
+                      : 'Expired or depleted (estimate)',
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _button(
+                      'Edit ${ledger.pass.title}',
+                      () => _passEditor(ledger.pass),
+                    ),
+                    _button(
+                      'Log ride on ${ledger.pass.title}',
+                      () => _rideEditor(ledger),
+                    ),
+                    _button(
+                      'History for ${ledger.pass.title}',
+                      () => _showHistory(ledger.pass),
+                    ),
+                  ],
+                ),
               ],
             ),
-        ],
+          ),
+        ),
+    ],
+  );
+
+  Widget _history({String? passId, VoidCallback? onChanged}) {
+    final passes = _passes.where(
+      (ledger) => passId == null || ledger.pass.id == passId,
+    );
+    return ListView(
+      key: PageStorageKey('history-${passId ?? 'all'}'),
+      padding: const EdgeInsets.all(16),
+      children: [
+        _heading('Ride history'),
+        if (_error != null) Semantics(liveRegion: true, child: Text(_error!)),
+        if (passes.every((ledger) => ledger.events.isEmpty))
+          const Text('No rides recorded yet'),
+        for (final ledger in passes)
+          if (ledger.events.isNotEmpty) ...[
+            _heading(ledger.pass.title),
+            for (final event in ledger.events.reversed)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _controls.card(
+                  context,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${event.kind.name} · ${event.occurredAt.toLocal()} · ${event.units ?? 'reverses ${event.reversesId}'}',
+                      ),
+                      if (event.kind != PassEventKind.reversal &&
+                          !ledger.events.any((e) => e.reversesId == event.id))
+                        _button('Reverse ${event.id}', () {
+                          _correct(ledger, event);
+                          onChanged?.call();
+                        }),
+                    ],
+                  ),
+                ),
+              ),
+          ],
       ],
+    );
+  }
+
+  void _showHistory(TransitPass pass) {
+    Widget page(BuildContext context) => StatefulBuilder(
+      builder: (context, refresh) {
+        final body = _history(passId: pass.id, onChanged: () => refresh(() {}));
+        if (_controls.ios) {
+          return CupertinoPageScaffold(
+            navigationBar: CupertinoNavigationBar(middle: Text(pass.title)),
+            child: SafeArea(child: body),
+          );
+        }
+        if (_controls.windows) {
+          return fluent.NavigationView(
+            content: fluent.ScaffoldPage(
+              header: fluent.PageHeader(
+                title: Text(pass.title),
+                leading: fluent.IconButton(
+                  icon: const Icon(fluent.FluentIcons.back),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              content: body,
+            ),
+          );
+        }
+        return Scaffold(
+          appBar: AppBar(title: Text(pass.title)),
+          body: SafeArea(child: body),
+        );
+      },
+    );
+
+    Navigator.of(context).push<void>(
+      _controls.ios
+          ? CupertinoPageRoute<void>(builder: page)
+          : _controls.windows
+          ? fluent.FluentPageRoute<void>(builder: page)
+          : MaterialPageRoute<void>(builder: page),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final available = !_loading && _store != null;
+    final placeholder = Center(
+      child: Semantics(
+        liveRegion: true,
+        child: Text(
+          _loading ? 'Loading passes' : _error ?? 'Storage unavailable',
+        ),
+      ),
+    );
+    return CallbackShortcuts(
+      bindings: {
+        if (available) ...{
+          const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
+              _passEditor(),
+          const SingleActivator(LogicalKeyboardKey.keyN, meta: true): () =>
+              _passEditor(),
+        },
+      },
+      child: FocusTraversalGroup(
+        child: Focus(
+          autofocus: true,
+          child: AdaptiveWorkspace(
+            platform: widget.platform,
+            selected: _selected,
+            onSelected: (value) => setState(() => _selected = value),
+            passes: available ? _passList() : placeholder,
+            history: available ? _history() : placeholder,
+          ),
+        ),
+      ),
     );
   }
 }
