@@ -61,7 +61,11 @@ void main() {
     );
 
     // Reverse ride
+    await tester.tap(find.text('History for Metro 10-Ride'));
+    await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Reverse ').first);
+    await tester.pumpAndSettle();
+    await tester.pageBack();
     await tester.pumpAndSettle();
     expect(
       find.text('ridePack · 10 rides left · 0 rides logged'),
