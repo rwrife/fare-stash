@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:fare_stash/data/pass_backup.dart';
 import 'package:fare_stash/domain/pass_ledger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -96,17 +97,39 @@ final class PassStore {
     final events = List<PassEvent>.of(history);
     PassLedger(pass, events);
     _transaction(() {
-      _db.execute('INSERT INTO passes VALUES (?, ?, ?, ?, ?, ?, ?)', [
-        pass.id,
-        pass.title,
-        pass.kind.name,
-        pass.startingBalance,
-        pass.currency,
-        pass.validFrom?.toUtc().toIso8601String(),
-        pass.validUntil?.toUtc().toIso8601String(),
-      ]);
+      _insertPass(pass);
       for (final event in events) {
         _insertEvent(event);
+      }
+    });
+  }
+
+  /// Validates a complete backup before atomically replacing local history.
+  void restoreJson(String source) => restoreAll(PassBackup.decode(source));
+
+  void restoreAll(Iterable<PassLedger> history) {
+    final ledgers = List<PassLedger>.unmodifiable(history);
+    final passIds = <String>{};
+    final eventIds = <String>{};
+    for (final ledger in ledgers) {
+      PassLedger(ledger.pass, ledger.events);
+      if (!passIds.add(ledger.pass.id)) {
+        throw FormatException('Duplicate pass ID: ${ledger.pass.id}');
+      }
+      for (final event in ledger.events) {
+        if (!eventIds.add(event.id)) {
+          throw FormatException('Duplicate event ID: ${event.id}');
+        }
+      }
+    }
+    _transaction(() {
+      _db.execute('DELETE FROM events');
+      _db.execute('DELETE FROM passes');
+      for (final ledger in ledgers) {
+        _insertPass(ledger.pass);
+        for (final event in ledger.events) {
+          _insertEvent(event);
+        }
       }
     });
   }
@@ -154,6 +177,17 @@ final class PassStore {
         event.units,
         event.currency,
         event.reversesId,
+      ]);
+
+  void _insertPass(TransitPass pass) =>
+      _db.execute('INSERT INTO passes VALUES (?, ?, ?, ?, ?, ?, ?)', [
+        pass.id,
+        pass.title,
+        pass.kind.name,
+        pass.startingBalance,
+        pass.currency,
+        pass.validFrom?.toUtc().toIso8601String(),
+        pass.validUntil?.toUtc().toIso8601String(),
       ]);
 
   PassLedger? get(String passId) => _load(passId);

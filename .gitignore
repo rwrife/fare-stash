@@ -20,3 +20,4 @@ windows/flutter/ephemeral/
 *.db-shm
 *.db-wal
 *.bak
+.worktrees/
