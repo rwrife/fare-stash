@@ -1,0 +1,66 @@
+name: Windows release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional vMAJOR.MINOR.PATCH tag to publish a GitHub Release
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$') {
+            throw "Release tag must use vMAJOR.MINOR.PATCH: $env:RELEASE_TAG"
+          }
+
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build windows --release
+
+      - name: Package portable Windows build
+        shell: pwsh
+        run: |
+          $releaseDir = 'build\windows\x64\runner\Release'
+          if (-not (Test-Path $releaseDir)) {
+            throw "Windows release output was not found: $releaseDir"
+          }
+          Compress-Archive -Path "$releaseDir\*" -DestinationPath 'fare-stash-windows.zip' -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fare-stash-windows
+          path: fare-stash-windows.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          name: Fare Stash ${{ inputs.release_tag || github.ref_name }}
+          generate_release_notes: true
+          files: fare-stash-windows.zip
