@@ -40,7 +40,7 @@ Flutter 3.47.7 Windows/Android/iOS runners, an offline SQLite pass ledger, and m
 4. Issue #4: Pass management, ride deduction logging, and balance calculation workflows.
 5. Issue #5: Adaptive multi-platform UI (Cupertino, Material 3, Fluent) and golden/widget tests.
 6. Issue #6: Implemented versioned JSON backup/restore and CSV ride-history export.
-7. Issue #7: Release workflow, store description, and spark-media icon asset pipeline.
+7. Issue #7: Windows release workflow and platform launcher icon integration.
 
 ### Adaptive workspace
 
@@ -50,7 +50,7 @@ Controls support keyboard traversal and mouse hover; Ctrl+N (Command+N) opens Ad
 
 Run `flutter test test/adaptive_test.dart test/app_test.dart` for platform-isolated rendering, resizing, accessibility, and workflow checks. Screenshot assertions render iOS, Android, and Windows at 390×844, 768×1024, and 1440×900, verify opaque/nonempty output and native shell/layout geometry, and write PNGs to `build/adaptive-screenshots/` for inspection. These are rendering assertions rather than pixel-perfect baseline goldens; native-device VoiceOver/TalkBack/Narrator verification remains a manual release check.
 
-`AppStore/description.txt` provides accurate planning copy. The real `AppStore/icon.png` is generated via OpenAI Images using `~/.local/bin/spark-media --project fare-stash image --prompt "..."` and wired into Windows/Android/iOS icon sets; no placeholder icon is accepted as complete.
+`AppStore/description.txt` is the current store listing copy. `AppStore/icon.png` is the full-size source artwork for the Windows `.ico`, Android launcher PNGs, and iOS app-icon set. Mobile store submissions remain deferred.
 
 JSON backup files include pass definitions and immutable ride events with IDs, UTC timestamps, integer minor units, currencies, and reversals. Restore validates the entire versioned file before transactionally replacing local records and asks before doing so. CSV exports the full event history, including corrections and reversals. File selection stays on-device through each platform's native picker; no account or network service is used. Run `flutter test test/pass_backup_test.dart` for backup fidelity, malformed/duplicate import, and CSV escaping checks.
 
@@ -62,7 +62,7 @@ flutter pub get
 flutter test
 flutter run -d windows
 ```
-Linux verification runs in Docker containers (`docker run --rm -v "$PWD:/work" ...`). The Windows release build runs on GitHub Actions `windows-latest` via `.github/workflows/release.yml` on `v*` tags, producing a zipped release bundle attached to GitHub Releases. iOS TestFlight and Android Play submissions remain deferred milestones.
+Linux verification runs in Docker containers (`docker run --rm -v "$PWD:/work" ...`). `.github/workflows/release.yml` runs tests and builds a Windows portable ZIP on `windows-latest`, uploading it as a workflow artifact. A `v*` tag publishes that ZIP to a GitHub Release; manual dispatch can build an artifact without publishing, or publish when a `vMAJOR.MINOR.PATCH` release tag is supplied. iOS TestFlight and Android Play submissions remain deferred milestones.
 
 ## Manual setup required
 
