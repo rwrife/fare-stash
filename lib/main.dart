@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:fare_stash/adaptive.dart';
+import 'package:fare_stash/data/pass_backup.dart';
 import 'package:fare_stash/data/pass_store.dart';
 import 'package:fare_stash/domain/pass_ledger.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -82,6 +85,7 @@ class _PassHomeState extends State<PassHome> {
   PassStore? _store;
   bool _loading = true;
   String? _error;
+  String? _notice;
   List<PassLedger> _passes = [];
   int _selected = 0;
   static final _random = Random.secure();
@@ -130,6 +134,7 @@ class _PassHomeState extends State<PassHome> {
       setState(() {
         _passes = _store!.all();
         _error = null;
+        _notice = null;
       });
     } catch (error) {
       setState(() => _error = '$error');
@@ -305,6 +310,135 @@ class _PassHomeState extends State<PassHome> {
     );
   }
 
+  Future<void> _saveTextFile({
+    required String title,
+    required String fileName,
+    required String extension,
+    required String Function() contents,
+  }) async {
+    try {
+      final uri = await FilePicker.saveFile(
+        dialogTitle: title,
+        fileName: fileName,
+        mimeType: extension == 'json' ? 'application/json' : 'text/csv',
+        bytes: Uint8List.fromList(utf8.encode(contents())),
+      );
+      if (uri == null) return;
+      if (!mounted) return;
+      setState(() {
+        _error = null;
+        _notice = 'Saved $fileName';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$error';
+        _notice = null;
+      });
+    }
+  }
+
+  Future<void> _exportBackup() => _saveTextFile(
+    title: 'Export Fare Stash backup',
+    fileName: 'fare-stash-backup.json',
+    extension: 'json',
+    contents: () => PassBackup.encode(_store!.all()),
+  );
+
+  Future<void> _exportCsv() => _saveTextFile(
+    title: 'Export Fare Stash ride history',
+    fileName: 'fare-stash-rides.csv',
+    extension: 'csv',
+    contents: () => PassBackup.toCsv(_store!.all()),
+  );
+
+  Future<bool?> _confirmRestore() {
+    const warning =
+        'This replaces all passes and ride history currently stored on this device.';
+    if (_controls.ios) {
+      return showCupertinoDialog<bool>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Restore backup?'),
+          content: const Text(warning),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Replace data'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_controls.windows) {
+      return fluent.showDialog<bool>(
+        context: context,
+        builder: (context) => fluent.ContentDialog(
+          title: const Text('Restore backup?'),
+          content: const Text(warning),
+          actions: [
+            fluent.Button(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            fluent.FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Replace data'),
+            ),
+          ],
+        ),
+      );
+    }
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restore backup?'),
+        content: const Text(warning),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Replace data'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _restoreBackup() async {
+    try {
+      final selection = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+      );
+      if (selection == null) return;
+      final ledgers = PassBackup.decode(
+        utf8.decode(await selection.readAsBytes()),
+      );
+      if (!mounted || await _confirmRestore() != true) return;
+      _store!.restoreAll(ledgers);
+      setState(() {
+        _passes = _store!.all();
+        _error = null;
+        _notice = 'Backup restored';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$error';
+        _notice = null;
+      });
+    }
+  }
+
   Widget _heading(String text) => Semantics(
     header: true,
     child: Padding(
@@ -322,10 +456,21 @@ class _PassHomeState extends State<PassHome> {
     children: [
       _heading('Your passes'),
       const Text('Manual estimates only — not proof of a valid ticket.'),
-      Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: _button('Add pass', () => _passEditor()),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _button('Add pass', () => _passEditor()),
+          _button('Export JSON backup', _exportBackup),
+          _button('Restore JSON backup', _restoreBackup),
+          _button('Export ride history CSV', _exportCsv),
+        ],
       ),
+      if (_notice != null)
+        Semantics(
+          liveRegion: true,
+          child: Text(_notice!, key: const Key('store-notice')),
+        ),
       if (_error != null)
         Semantics(
           liveRegion: true,

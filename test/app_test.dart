@@ -17,6 +17,9 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('No passes yet'), findsOneWidget);
+    expect(find.text('Export JSON backup'), findsOneWidget);
+    expect(find.text('Restore JSON backup'), findsOneWidget);
+    expect(find.text('Export ride history CSV'), findsOneWidget);
     store.close();
   });
 
